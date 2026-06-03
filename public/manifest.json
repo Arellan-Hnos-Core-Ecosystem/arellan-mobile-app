@@ -1,0 +1,25 @@
+{
+  "name": "Arellan Hnos - Gerencial",
+  "short_name": "Arellan Hnos",
+  "description": "Aplicacion gerencial movil para propietarios y administradores de Clinica Automotriz Arellan Hnos",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FFFFFF",
+  "theme_color": "#1B3A6B",
+  "lang": "es-PE",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
