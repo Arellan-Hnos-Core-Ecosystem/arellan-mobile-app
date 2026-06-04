@@ -59,7 +59,7 @@ export default function DashboardPage() {
                 <div className="text-right">
                   <Badge variant={summary.revenueChangePercent >= 0 ? 'success' : 'error'} size="sm">
                     {summary.revenueChangePercent >= 0 ? '+' : ''}
-                    {summary.revenueChangePercent.toFixed(1)}% vs ayer
+                    {Number(summary.revenueChangePercent || 0).toFixed(1)}% vs ayer
                   </Badge>
                 </div>
               </div>
