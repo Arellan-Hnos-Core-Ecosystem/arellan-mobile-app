@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { api, getAccessToken } from '@/lib/api'
 import type { AlertItem, PaginatedResponse } from '@/types'
 
 export function useAlerts(page = 1, pageSize = 30) {
@@ -11,8 +11,10 @@ export function useAlerts(page = 1, pageSize = 30) {
       })
       return data
     },
+    enabled: typeof window !== 'undefined' && !!getAccessToken(),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 3,
   })
 }
 

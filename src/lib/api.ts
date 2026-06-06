@@ -4,6 +4,7 @@ import type { ApiError, MFAVerifyRequest, MFAVerifyResponse } from '@/types'
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1',
   timeout: 15000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -14,10 +15,31 @@ let refreshToken: string | null = null
 let mfaToken: string | null = null
 let onMFARequired: ((token: string) => Promise<string>) | null = null
 let onUnauthorized: (() => void) | null = null
+let isLoggingOut = false
+
+export function setIsLoggingOut(value: boolean) {
+  isLoggingOut = value
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    const stored = sessionStorage.getItem('arellan-auth-tokens')
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      accessToken = parsed.accessToken || null
+      refreshToken = parsed.refreshToken || null
+    }
+  } catch { /* ignore */ }
+}
 
 export function setTokens(access: string, refresh: string) {
   accessToken = access
   refreshToken = refresh
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem('arellan-auth-tokens', JSON.stringify({ accessToken: access, refreshToken: refresh }))
+    } catch { /* ignore */ }
+  }
 }
 
 export function setMFAToken(token: string) {
@@ -28,6 +50,9 @@ export function clearTokens() {
   accessToken = null
   refreshToken = null
   mfaToken = null
+  if (typeof window !== 'undefined') {
+    try { sessionStorage.removeItem('arellan-auth-tokens') } catch { /* ignore */ }
+  }
 }
 
 export function getAccessToken() {
@@ -80,8 +105,10 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      clearTokens()
-      onUnauthorized?.()
+      if (!isLoggingOut) {
+        clearTokens()
+        onUnauthorized?.()
+      }
       return Promise.reject(getApiError(error))
     }
 

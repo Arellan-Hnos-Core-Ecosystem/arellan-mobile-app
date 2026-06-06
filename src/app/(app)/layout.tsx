@@ -1,31 +1,21 @@
 'use client'
 
-import { useEffect, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useAuthStore } from '@/stores/auth'
 import { Spinner } from '@arellan-hnos-core-ecosystem/ui'
 import { BottomNav } from './bottom-nav'
+
+function hasSessionCookie(): boolean {
+  if (typeof document === 'undefined') return false
+  return document.cookie.split(';').some((c) => c.trim().startsWith('arellan-auth='))
+}
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { isAuthenticated, isLoading } = useAuthStore()
 
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login')
-    }
-  }, [isAuthenticated, isLoading, router])
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Spinner size="lg" label="Cargando..." />
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
+  if (typeof window !== 'undefined' && !hasSessionCookie()) {
+    router.replace('/login')
     return null
   }
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import type { ExecutiveSummary, ExpenseApproval, OrderSummary, PaginatedResponse } from '@/types'
+import { api, getAccessToken } from '@/lib/api'
+import type { ExecutiveSummary, OrderSummary, PaginatedResponse } from '@/types'
 
 export function useExecutiveSummary() {
   return useQuery({
@@ -9,8 +9,10 @@ export function useExecutiveSummary() {
       const { data } = await api.get<ExecutiveSummary>('/dashboard/summary')
       return data
     },
+    enabled: typeof window !== 'undefined' && !!getAccessToken(),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 3,
   })
 }
 
@@ -21,8 +23,10 @@ export function usePendingApprovals() {
       const { data } = await api.get<{ count: number }>('/dashboard/pending-approvals-count')
       return data
     },
+    enabled: typeof window !== 'undefined' && !!getAccessToken(),
     refetchInterval: 30000,
     staleTime: 15000,
+    retry: 3,
   })
 }
 
@@ -35,49 +39,9 @@ export function useActiveOrders() {
       })
       return data
     },
+    enabled: typeof window !== 'undefined' && !!getAccessToken(),
     refetchInterval: 60000,
     staleTime: 30000,
+    retry: 3,
   })
-}
-
-export function usePendingExpenses(page = 1, pageSize = 20) {
-  return useQuery({
-    queryKey: ['pending-expenses', page, pageSize],
-    queryFn: async () => {
-      const { data } = await api.get<PaginatedResponse<ExpenseApproval>>('/expenses/pending', {
-        params: { page, pageSize },
-      })
-      return data
-    },
-    refetchInterval: 30000,
-    staleTime: 15000,
-  })
-}
-
-export function useApproveExpense() {
-  const { refetch: refetchExpenses } = usePendingExpenses()
-  const { refetch: refetchSummary } = useExecutiveSummary()
-
-  return {
-    mutateAsync: async (expenseId: string) => {
-      const { data } = await api.post(`/expenses/${expenseId}/approve`)
-      await refetchExpenses()
-      await refetchSummary()
-      return data
-    },
-  }
-}
-
-export function useRejectExpense() {
-  const { refetch: refetchExpenses } = usePendingExpenses()
-  const { refetch: refetchSummary } = useExecutiveSummary()
-
-  return {
-    mutateAsync: async (expenseId: string, reason: string) => {
-      const { data } = await api.post(`/expenses/${expenseId}/reject`, { reason })
-      await refetchExpenses()
-      await refetchSummary()
-      return data
-    },
-  }
 }

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { api, setTokens, clearTokens, setMFAToken, setMFAHandler, setUnauthorizedHandler } from '@/lib/api'
+import { persist, createJSONStorage } from 'zustand/middleware'
+import { api, setTokens, clearTokens, setMFAToken, setMFAHandler, setUnauthorizedHandler, setIsLoggingOut } from '@/lib/api'
 import type { User, LoginRequest, LoginResponse, MFAVerifyRequest, MFAVerifyResponse } from '@/types'
 
 interface AuthState {
@@ -19,6 +19,23 @@ interface AuthState {
   setUser: (user: User) => void
   setForceLogoutEnabled: (enabled: boolean) => void
 }
+
+function setSessionCookie() {
+  // ahora gestionado por NestJS via Set-Cookie header
+}
+
+function clearSessionCookie() {
+  if (typeof document === 'undefined') return
+  document.cookie = 'arellan-auth=; path=/; max-age=0'
+}
+
+const storage = typeof window !== 'undefined'
+  ? createJSONStorage(() => localStorage)
+  : createJSONStorage(() => ({
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    }))
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -43,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
       setUnauthorizedHandler(() => {
         set({ user: null, isAuthenticated: false, mfaRequired: false, mfaToken: null })
         clearTokens()
+        clearSessionCookie()
         if (typeof window !== 'undefined') {
           window.location.href = '/login'
         }
@@ -62,8 +80,8 @@ export const useAuthStore = create<AuthState>()(
             const response = await api.post<LoginResponse>('/auth/login', data)
             const result = response.data
 
-            if (result.mfaRequired && result.mfaToken) {
-              set({ mfaRequired: true, mfaToken: result.mfaToken, isLoading: false })
+            if (result.mfaRequired) {
+              set({ mfaRequired: true, mfaToken: result.mfaToken || null, isLoading: false })
               return result
             }
 
@@ -77,11 +95,31 @@ export const useAuthStore = create<AuthState>()(
                 mfaToken: null,
                 forceLogoutEnabled: result.user.role === 'OWNER',
               })
+              return result
             }
 
             set({ isLoading: false })
             return result
-          } catch (error) {
+          } catch (error: unknown) {
+            if (
+              error &&
+              typeof error === 'object' &&
+              'response' in error &&
+              (error as any).response?.status === 403
+            ) {
+              const errData = (error as any).response?.data
+              const headers = (error as any).response?.headers || {}
+              const mfaTokenHeader = (headers['x-mfa-token'] as string) || ''
+              if (errData?.code === 'MFA_REQUIRED' && !data.totpCode) {
+                set({
+                  mfaRequired: true,
+                  mfaToken: mfaTokenHeader || null,
+                  isLoading: false,
+                })
+                return { mfaRequired: true, mfaToken: mfaTokenHeader || undefined }
+              }
+            }
+
             set({ isLoading: false })
             throw error
           }
@@ -121,6 +159,7 @@ export const useAuthStore = create<AuthState>()(
         },
 
         logout: async () => {
+          setIsLoggingOut(true)
           try {
             await api.post('/auth/logout')
           } catch {
@@ -134,6 +173,8 @@ export const useAuthStore = create<AuthState>()(
             mfaToken: null,
             forceLogoutEnabled: false,
           })
+          clearSessionCookie()
+          setIsLoggingOut(false)
         },
 
         forceLogout: async (userId: string) => {
@@ -147,6 +188,7 @@ export const useAuthStore = create<AuthState>()(
     },
     {
       name: 'arellan-auth',
+      storage,
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,

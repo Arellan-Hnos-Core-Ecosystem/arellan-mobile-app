@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -13,70 +12,88 @@ import {
   Button,
   Input,
   Alert,
+  Toast,
   Spinner,
 } from '@arellan-hnos-core-ecosystem/ui'
 import { useAuthStore } from '@/stores/auth'
 
-const loginSchema = z.object({
+const step1Schema = z.object({
   email: z.string().min(1, 'El correo es requerido').email('Correo invalido'),
   password: z.string().min(1, 'La contrasena es requerida').min(6, 'Minimo 6 caracteres'),
 })
 
-const mfaSchema = z.object({
-  code: z.string().min(1, 'El codigo es requerido').length(6, 'El codigo debe tener 6 digitos'),
+const step2Schema = z.object({
+  totpCode: z.string().min(1, 'El codigo es requerido').length(6, 'El codigo debe tener 6 digitos'),
 })
 
-type LoginFormData = z.infer<typeof loginSchema>
-type MFAFormData = z.infer<typeof mfaSchema>
+type Step1Data = z.infer<typeof step1Schema>
+type Step2Data = z.infer<typeof step2Schema>
 
 export default function LoginPage() {
-  const router = useRouter()
-  const { login, verifyMFA, cancelMFA, mfaRequired, isLoading } = useAuthStore()
-  const [error, setError] = useState<string | null>(null)
+  const { login, isLoading } = useAuthStore()
+  const [step, setStep] = useState<'credentials' | 'mfa'>('credentials')
+  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null)
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null)
 
   const {
-    register: loginRegister,
-    handleSubmit: handleLoginSubmit,
-    formState: { errors: loginErrors },
-  } = useForm<LoginFormData>({
-    resolver: zodResolver(loginSchema),
+    register: credRegister,
+    handleSubmit: handleCredSubmit,
+    formState: { errors: credErrors },
+  } = useForm<Step1Data>({
+    resolver: zodResolver(step1Schema),
   })
 
   const {
     register: mfaRegister,
     handleSubmit: handleMFASubmit,
     formState: { errors: mfaErrors },
-  } = useForm<MFAFormData>({
-    resolver: zodResolver(mfaSchema),
+  } = useForm<Step2Data>({
+    resolver: zodResolver(step2Schema),
   })
 
-  const onLoginSubmit = async (data: LoginFormData) => {
-    setError(null)
+  const onCredentialsSubmit = async (data: Step1Data) => {
+    setLoginError(null)
     try {
-      const result = await login(data)
-      if (!result.mfaRequired) {
-        router.push('/dashboard')
+      const result = await login({ email: data.email, password: data.password })
+      if (result.mfaRequired) {
+        setCredentials({ email: data.email, password: data.password })
+        setStep('mfa')
+      } else {
+        setToast({ variant: 'success', message: 'Sesion iniciada correctamente' })
+        setTimeout(() => window.location.replace('/dashboard'), 100)
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al iniciar sesion'
-      setError(msg)
+      setLoginError(msg)
     }
   }
 
-  const onMFASubmit = async (data: MFAFormData) => {
-    setError(null)
+  const onMFASubmit = async (data: Step2Data) => {
+    setLoginError(null)
+    if (!credentials) return
     try {
-      await verifyMFA(data.code)
-      router.push('/dashboard')
+      const result = await login({
+        email: credentials.email,
+        password: credentials.password,
+        totpCode: data.totpCode,
+      })
+      if (result.mfaRequired) {
+        setLoginError('Codigo MFA invalido o expirado')
+        return
+      }
+      setToast({ variant: 'success', message: 'Sesion iniciada correctamente' })
+      setTimeout(() => window.location.replace('/dashboard'), 100)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Codigo MFA invalido'
-      setError(msg)
+      setLoginError(msg)
     }
   }
 
-  const handleCancelMFA = () => {
-    cancelMFA()
-    setError(null)
+  const handleBack = () => {
+    setStep('credentials')
+    setLoginError(null)
+    setCredentials(null)
   }
 
   if (isLoading) {
@@ -102,7 +119,7 @@ export default function LoginPage() {
       </div>
 
       <Card className="w-full max-w-md">
-        {mfaRequired ? (
+        {step === 'mfa' ? (
           <form onSubmit={handleMFASubmit(onMFASubmit)}>
             <CardHeader>
               <h2 className="text-lg font-semibold text-neutral-900">Verificacion en dos pasos</h2>
@@ -111,16 +128,16 @@ export default function LoginPage() {
               </p>
             </CardHeader>
             <CardContent>
-              {error && (
-                <Alert variant="error" title="Error" description={error} className="mb-4" />
+              {loginError && (
+                <Alert variant="error" title="Error" description={loginError} className="mb-4" />
               )}
               <Input
                 label="Codigo MFA"
                 inputSize="lg"
                 placeholder="000000"
                 maxLength={6}
-                error={mfaErrors.code?.message}
-                {...mfaRegister('code')}
+                error={mfaErrors.totpCode?.message}
+                {...mfaRegister('totpCode')}
                 autoComplete="one-time-code"
                 inputMode="numeric"
                 autoFocus
@@ -128,17 +145,17 @@ export default function LoginPage() {
             </CardContent>
             <CardFooter>
               <div className="flex w-full gap-3">
-                <Button variant="ghost" fullWidth onClick={handleCancelMFA} type="button">
-                  Cancelar
+                <Button variant="ghost" fullWidth onClick={handleBack} type="button">
+                  Volver
                 </Button>
                 <Button variant="primary" fullWidth size="lg" type="submit">
-                  Verificar
+                  Confirmar Codigo de Seguridad
                 </Button>
               </div>
             </CardFooter>
           </form>
         ) : (
-          <form onSubmit={handleLoginSubmit(onLoginSubmit)}>
+          <form onSubmit={handleCredSubmit(onCredentialsSubmit)}>
             <CardHeader>
               <h2 className="text-lg font-semibold text-neutral-900">Iniciar sesion</h2>
               <p className="mt-1 text-sm text-neutral-500">
@@ -146,16 +163,16 @@ export default function LoginPage() {
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
-              {error && (
-                <Alert variant="error" title="Error" description={error} />
+              {loginError && (
+                <Alert variant="error" title="Error" description={loginError} />
               )}
               <Input
                 label="Correo electronico"
                 type="email"
                 inputSize="lg"
                 placeholder="usuario@arellanhnos.com"
-                error={loginErrors.email?.message}
-                {...loginRegister('email')}
+                error={credErrors.email?.message}
+                {...credRegister('email')}
                 autoComplete="email"
                 autoFocus
               />
@@ -164,8 +181,8 @@ export default function LoginPage() {
                 type="password"
                 inputSize="lg"
                 placeholder="••••••••"
-                error={loginErrors.password?.message}
-                {...loginRegister('password')}
+                error={credErrors.password?.message}
+                {...credRegister('password')}
                 autoComplete="current-password"
               />
             </CardContent>
@@ -181,6 +198,12 @@ export default function LoginPage() {
       <p className="mt-6 text-center text-xs text-brand-200">
         Clinica Automotriz Arellan Hnos &copy; {new Date().getFullYear()}
       </p>
+
+      {toast && (
+        <div className="fixed bottom-4 left-4 right-4 flex justify-center z-50">
+          <Toast variant={toast.variant} message={toast.message} />
+        </div>
+      )}
     </div>
   )
 }
