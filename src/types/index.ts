@@ -49,6 +49,44 @@ export interface ExecutiveSummary {
   lastUpdated: string
 }
 
+export interface MechanicCycleTimeEntry {
+  mechanicId: string
+  mechanicName: string
+  ordersCompleted: number
+  avgCycleTimeHours: number
+}
+
+export interface MechanicCycleTimeReport {
+  mechanics: MechanicCycleTimeEntry[]
+  overallAvgCycleTimeHours: number
+}
+
+export interface QuoteConversionReport {
+  quotesSent: number
+  quotesApproved: number
+  conversionRatePercent: number
+}
+
+export interface InventoryValuationReport {
+  totalItems: number
+  totalValuation: number
+}
+
+export interface CashMarginReport {
+  totalIncome: number
+  totalExpenses: number
+  netMargin: number
+}
+
+export interface ExecutiveSummaryReport {
+  cycleTime: MechanicCycleTimeReport
+  quoteConversion: QuoteConversionReport
+  inventoryValuation: InventoryValuationReport
+  cashMargin: CashMarginReport
+  generatedAt: string
+  cached: boolean
+}
+
 export interface ExpenseApproval {
   id: string
   amount: number

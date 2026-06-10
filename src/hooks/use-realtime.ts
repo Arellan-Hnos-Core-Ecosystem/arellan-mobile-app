@@ -7,11 +7,20 @@ import { getAccessToken } from "@/lib/api"
 
 type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error"
 
+export interface CashboxBlockedEvent {
+  type: "CASHBOX_BLOCKED"
+  description: string
+  severity: "CRITICAL"
+  sessionId: string
+  userId?: string
+}
+
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "http://localhost:3001"
 
 export function useRealtime() {
   const socketRef = useRef<Socket | null>(null)
   const [status, setStatus] = useState<ConnectionStatus>("disconnected")
+  const [cashboxBlocked, setCashboxBlocked] = useState<CashboxBlockedEvent | null>(null)
   const queryClient = useQueryClient()
 
   const connect = useCallback(() => {
@@ -63,7 +72,15 @@ export function useRealtime() {
       queryClient.invalidateQueries({ queryKey: ["executive-summary"] })
     })
 
-    socket.on("anomaly:detected", (_data: {
+    socket.on("cashbox:closed", (_data: {
+      sessionId: string
+      status: string
+      closedBy: string
+    }) => {
+      queryClient.invalidateQueries({ queryKey: ["analytics-summary"] })
+    })
+
+    socket.on("anomaly:detected", (data: {
       type: string
       description: string
       severity: string
@@ -72,6 +89,15 @@ export function useRealtime() {
     }) => {
       queryClient.invalidateQueries({ queryKey: ["alerts"] })
       queryClient.invalidateQueries({ queryKey: ["executive-summary"] })
+      if (data.type === "CASHBOX_BLOCKED" && data.sessionId) {
+        setCashboxBlocked({
+          type: "CASHBOX_BLOCKED",
+          description: data.description,
+          severity: "CRITICAL",
+          sessionId: data.sessionId,
+          userId: data.userId,
+        })
+      }
     })
 
     socketRef.current = socket
@@ -94,5 +120,7 @@ export function useRealtime() {
     isConnected: status === "connected",
     reconnect: connect,
     disconnect,
+    cashboxBlocked,
+    clearCashboxBlocked: () => setCashboxBlocked(null),
   } as const
 }

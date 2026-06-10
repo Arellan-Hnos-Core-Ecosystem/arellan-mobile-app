@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { useAlerts, useAcknowledgeAlert } from '@/hooks/use-alerts'
+import { useRealtime } from '@/hooks/use-realtime'
+import { api } from '@/lib/api'
 import {
   Card,
   CardContent,
@@ -13,6 +15,8 @@ import {
   Container,
   Skeleton,
   CashAmount,
+  Input,
+  FormField,
 } from '@arellan-hnos-core-ecosystem/ui'
 import type { AlertItem } from '@/types'
 
@@ -35,7 +39,34 @@ export default function AlertsPage() {
   const [page] = useState(1)
   const { data, isLoading, error } = useAlerts(page, 50)
   const acknowledgeMutation = useAcknowledgeAlert()
+  const { cashboxBlocked, clearCashboxBlocked } = useRealtime()
   const [ackError, setAckError] = useState<string | null>(null)
+
+  const [totpCode, setTotpCode] = useState("")
+  const [overrideReason, setOverrideReason] = useState("")
+  const [overriding, setOverriding] = useState(false)
+  const [overrideError, setOverrideError] = useState<string | null>(null)
+  const [overrideSuccess, setOverrideSuccess] = useState(false)
+
+  const handleCashboxOverride = async () => {
+    if (!cashboxBlocked || totpCode.length !== 6) return
+    setOverriding(true)
+    setOverrideError(null)
+    try {
+      await api.post("/finance/cashbox/override", {
+        sessionId: cashboxBlocked.sessionId,
+        totpCode,
+        overrideReason: overrideReason.trim() || undefined,
+      })
+      setOverrideSuccess(true)
+      setTotpCode("")
+      clearCashboxBlocked()
+    } catch (err: any) {
+      setOverrideError(err.response?.data?.message ?? err.message ?? "Error al procesar el override.")
+    } finally {
+      setOverriding(false)
+    }
+  }
 
   const alerts = data?.data ?? []
 
@@ -54,6 +85,60 @@ export default function AlertsPage() {
         <h1 className="text-xl font-bold text-neutral-900">Alertas</h1>
         <p className="text-sm text-neutral-500">Historial de alertas del sistema</p>
       </div>
+
+      {/* CASHBOX BLOCKED — Override Card (Anti-Fraude #2) */}
+      {cashboxBlocked && !overrideSuccess && (
+        <Card className="mb-4 border-2 border-red-500 bg-red-50">
+          <CardContent className="py-4 space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-xl">🔒</span>
+              <div>
+                <p className="text-base font-bold text-red-900">CAJA BLOQUEADA — Acción Obligatoria</p>
+                <p className="text-xs text-red-700">Sesión: {cashboxBlocked.sessionId.slice(0, 8)}…</p>
+              </div>
+            </div>
+            <p className="text-sm text-red-800">{cashboxBlocked.description}</p>
+            <FormField label="Código Google Authenticator (6 dígitos)" error={overrideError ?? undefined}>
+              <Input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="● ● ● ● ● ●"
+                value={totpCode}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                  setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setOverrideError(null)
+                }}
+                className="text-center text-lg tracking-widest"
+              />
+            </FormField>
+            <FormField label="Motivo del override (opcional)">
+              <Input
+                type="text"
+                placeholder="Ej: Error de conteo verificado con cámara"
+                value={overrideReason}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOverrideReason(e.target.value)}
+              />
+            </FormField>
+            <Button
+              variant="danger"
+              className="w-full min-h-[48px] font-bold"
+              disabled={totpCode.length !== 6 || overriding}
+              onClick={handleCashboxOverride}
+            >
+              {overriding ? (
+                <span className="flex items-center gap-2"><Spinner size="sm" /> Verificando TOTP...</span>
+              ) : (
+                "Autorizar Forzado con TOTP"
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {overrideSuccess && (
+        <AlertComponent variant="success" title="Override exitoso" description="La caja ha sido normalizada. Las operaciones del taller han sido reanudadas." className="mb-4" onClose={() => setOverrideSuccess(false)} />
+      )}
 
       {ackError && (
         <AlertComponent variant="error" title="Error" description={ackError} className="mb-4" onClose={() => setAckError(null)} />
