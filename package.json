@@ -4,14 +4,15 @@
   "private": true,
   "description": "Aplicacion gerencial movil - Clinica Automotriz Arellan Hnos",
   "scripts": {
-    "dev": "next dev -p 3003",
+    "dev": "next dev -p 3005",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "next start -p 3005",
     "lint": "next lint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@arellan-hnos-core-ecosystem/ui": "file:../arellan-design-system/packages/ui",
+    "@arellan-hnos/business-intelligence-lab": "file:../arellan-data-intelligence/arellan-business-intelligence-lab",
     "@hookform/resolvers": "^3.9.1",
     "@tanstack/react-query": "^5.62.0",
     "axios": "^1.7.9",
