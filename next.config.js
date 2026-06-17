@@ -29,6 +29,7 @@ const withPWA = require('next-pwa')({
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  output: 'standalone',
   transpilePackages: ['@arellan-hnos-core-ecosystem/ui'],
   images: {
     unoptimized: true,
