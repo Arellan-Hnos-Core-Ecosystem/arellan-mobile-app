@@ -33,8 +33,10 @@ async function bffLogin(body: LoginRequest): Promise<LoginResponse> {
 }
 
 async function bffMfaVerify(mfaToken: string, code: string): Promise<MFAVerifyResponse> {
+  // FUN-20: verify contra la ruta BFF dedicada (proxy de /auth/mfa/verify) —
+  // antes se posteaba {mfaToken, code} al proxy de login (contrato imposible).
   const body: MFAVerifyRequest = { mfaToken, code };
-  const res = await fetch("/api/auth/login", {
+  const res = await fetch("/api/auth/mfa", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -102,7 +104,7 @@ export const useAuthStore = create<AuthState>()(
             }
 
             if (result.user && result.tokens) {
-              setTokens(result.tokens.accessToken, result.tokens.refreshToken);
+              setTokens(result.tokens.accessToken);
               set({
                 user: result.user,
                 isAuthenticated: true,
@@ -129,7 +131,7 @@ export const useAuthStore = create<AuthState>()(
           set({ isLoading: true });
           try {
             const { user, tokens } = await bffMfaVerify(mfaToken, code);
-            setTokens(tokens.accessToken, tokens.refreshToken);
+            setTokens(tokens.accessToken);
             setMFAToken("");
             set({
               user,

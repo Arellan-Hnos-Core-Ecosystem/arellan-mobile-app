@@ -11,8 +11,10 @@ export interface User {
 
 export interface AuthTokens {
   accessToken: string
-  refreshToken: string
-  expiresIn: number
+  // SEC-04: el refresh token ya no llega al JS del cliente — vive en cookie
+  // HttpOnly del BFF. Solo el access token (15 min) se maneja en memoria.
+  refreshToken?: string
+  expiresIn?: number
 }
 
 export interface LoginRequest {

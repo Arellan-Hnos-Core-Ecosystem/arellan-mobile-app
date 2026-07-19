@@ -10,8 +10,9 @@ const api = axios.create({
   },
 })
 
+// SEC-04: solo el access token (15 min) se maneja en el cliente; el refresh
+// token vive únicamente en la cookie HttpOnly del BFF y jamás llega al JS.
 let accessToken: string | null = null
-let refreshToken: string | null = null
 let mfaToken: string | null = null
 let onMFARequired: ((token: string) => Promise<string>) | null = null
 let onUnauthorized: (() => void) | null = null
@@ -27,17 +28,16 @@ if (typeof window !== 'undefined') {
     if (stored) {
       const parsed = JSON.parse(stored)
       accessToken = parsed.accessToken || null
-      refreshToken = parsed.refreshToken || null
     }
   } catch { /* ignore */ }
 }
 
-export function setTokens(access: string, refresh: string) {
+export function setTokens(access: string) {
   accessToken = access
-  refreshToken = refresh
   if (typeof window !== 'undefined') {
     try {
-      sessionStorage.setItem('arellan-auth-tokens', JSON.stringify({ accessToken: access, refreshToken: refresh }))
+      // Solo access token (TTL 15 min), acotado a la pestaña. Nunca el refresh.
+      sessionStorage.setItem('arellan-auth-tokens', JSON.stringify({ accessToken: access }))
     } catch { /* ignore */ }
   }
 }
@@ -48,7 +48,6 @@ export function setMFAToken(token: string) {
 
 export function clearTokens() {
   accessToken = null
-  refreshToken = null
   mfaToken = null
   if (typeof window !== 'undefined') {
     try { sessionStorage.removeItem('arellan-auth-tokens') } catch { /* ignore */ }
