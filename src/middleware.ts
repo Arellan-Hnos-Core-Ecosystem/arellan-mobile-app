@@ -6,9 +6,16 @@ const PROTECTED_PATHS = ["/dashboard", "/approvals", "/alerts", "/profile"];
 const AUTH_PATH = "/login";
 const ALLOWED_ROLES = new Set(["OWNER", "ADMIN"]);
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "arellan-change-me-in-production"
-);
+// SEC-17: el backend NestJS firma con `JWT_ACCESS_SECRET` (HS256). Antes se
+// usaba `JWT_SECRET` (nombre distinto) con fallback embebido predecible, lo que
+// rompía la validación o forzaba un secreto adivinable. Se alinea el nombre y se
+// elimina el fallback: sin secreto configurado se falla en cerrado (deniega).
+// (Recomendación de fondo: migrar el backend a RS256 y verificar aquí con la
+// clave pública, evitando compartir el secreto de firma con el frontend.)
+const JWT_SECRET_RAW = process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET;
+const JWT_SECRET = JWT_SECRET_RAW
+  ? new TextEncoder().encode(JWT_SECRET_RAW)
+  : null;
 
 interface ArellanJwtPayload extends JWTPayload {
   role?: string;
@@ -16,6 +23,10 @@ interface ArellanJwtPayload extends JWTPayload {
 }
 
 async function verifyToken(token: string): Promise<ArellanJwtPayload | null> {
+  if (!JWT_SECRET) {
+    console.error("[middleware] JWT_ACCESS_SECRET no configurado — se deniega el acceso protegido.");
+    return null;
+  }
   try {
     const { payload } = await jwtVerify<ArellanJwtPayload>(token, JWT_SECRET);
     return payload;

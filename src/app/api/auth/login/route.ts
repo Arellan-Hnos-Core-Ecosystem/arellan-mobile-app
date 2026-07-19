@@ -17,10 +17,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: "Error de conexion con el servidor" }, { status: 502 });
   }
 
+  // FUN-13: el backend NestJS devuelve el token en el nivel superior
+  // ({ accessToken, refreshToken, user }) y el flag de MFA como `mfaPending`
+  // ({ mfaPending, sessionToken }). El extractor anterior leía
+  // `tokens.accessToken`/`mfaRequired` (estructura inexistente) → 502 en cada
+  // login. Se lee de forma defensiva bajo ambas estructuras.
   const data = await nestRes.json() as {
     user?: { role?: string };
-    tokens?: { accessToken: string; refreshToken: string; expiresIn?: number };
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn?: number;
+    tokens?: { accessToken?: string; refreshToken?: string; expiresIn?: number };
+    mfaPending?: boolean;
     mfaRequired?: boolean;
+    sessionToken?: string;
     mfaToken?: string;
     message?: string;
   };
@@ -29,25 +39,30 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: nestRes.status });
   }
 
-  if (data.mfaRequired) {
+  const mfaPending = data.mfaPending ?? data.mfaRequired;
+  if (mfaPending) {
     return NextResponse.json(data, { status: 200 });
   }
 
-  if (!data.tokens?.accessToken || !data.user?.role) {
+  const accessToken = data.accessToken ?? data.tokens?.accessToken;
+  const role = data.user?.role;
+
+  if (!accessToken || !role) {
     return NextResponse.json({ message: "Respuesta de autenticacion invalida" }, { status: 502 });
   }
 
-  if (!ALLOWED_ROLES.has(data.user.role)) {
+  if (!ALLOWED_ROLES.has(role)) {
     return NextResponse.json({ message: "Acceso no autorizado para este rol" }, { status: 403 });
   }
 
+  const maxAge = data.expiresIn ?? data.tokens?.expiresIn ?? 3600;
   const response = NextResponse.json(data, { status: 200 });
-  response.cookies.set("arellan-auth", data.tokens.accessToken, {
+  response.cookies.set("arellan-auth", accessToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: data.tokens.expiresIn ?? 3600,
+    maxAge,
   });
 
   return response;
